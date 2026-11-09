@@ -1,4 +1,3 @@
-import { VAT_RATE } from '../../config/business';
 import type { PaymentMethod, Sale, SaleCustomer } from '../../models/sale';
 
 /** Lo que se necesita de una venta para facturarla (así el servidor no depende del modelo completo). */
@@ -32,8 +31,6 @@ export interface AlegraLine {
   discount: number;
   /** Unidad de medida que exige la DIAN: LAB CAR solo vende servicios. */
   unit: 'service';
-  /** IVA de la línea (el del 19% en Alegra). */
-  tax: { id: string }[];
 }
 
 export interface AlegraInvoicePayload {
@@ -125,29 +122,16 @@ export function contactPayload(customer: SaleCustomer): AlegraContactPayload {
   };
 }
 
-/** Precio sin IVA a partir del precio con IVA incluido (6 decimales, como calcula Alegra). */
-export function priceWithoutVat(price: number): number {
-  return Math.round((price / (1 + VAT_RATE)) * 1_000_000) / 1_000_000;
-}
-
 /**
- * Líneas de la factura: cada servicio con su descuento y el IVA del 19%. Los precios de LAB CAR ya
- * incluyen el IVA, así que se envía la base (precio ÷ 1,19) y Alegra suma el IVA: el total de la
- * factura es el mismo de la venta (se verifica antes de enviarla a la DIAN).
+ * Líneas de la factura: cada servicio con su precio y su descuento, sin IVA (LAB CAR es no
+ * responsable de IVA). El total de la factura es el mismo de la venta (se verifica antes de enviarla).
  */
-export function invoiceLines(sale: InvoiceSale, itemIds: ReadonlyMap<string, string>, vatTaxId: string): AlegraLine[] {
+export function invoiceLines(sale: InvoiceSale, itemIds: ReadonlyMap<string, string>): AlegraLine[] {
   return sale.items.map((item) => {
     const id = itemIds.get(item.name);
     if (!id) throw new Error(`Falta el ítem de Alegra para "${item.name}".`);
     // El nombre del servicio ya es el del ítem en Alegra: no se repite como descripción.
-    return {
-      id,
-      price: priceWithoutVat(item.price),
-      quantity: 1,
-      discount: item.discountPercent,
-      unit: 'service',
-      tax: [{ id: vatTaxId }],
-    };
+    return { id, price: item.price, quantity: 1, discount: item.discountPercent, unit: 'service' };
   });
 }
 
@@ -165,19 +149,13 @@ export function belongsToSale(anotation: string, saleId: string): boolean {
  * Factura en borrador: se crea así para comparar su total con el de la venta antes de enviarla a
  * la DIAN. La numeración es la preferida de la cuenta (la resolución vigente).
  */
-export function invoicePayload(
-  sale: InvoiceSale,
-  clientId: string,
-  itemIds: ReadonlyMap<string, string>,
-  vatTaxId: string,
-  creditDays: number,
-): AlegraInvoicePayload {
+export function invoicePayload(sale: InvoiceSale, clientId: string, itemIds: ReadonlyMap<string, string>, creditDays: number): AlegraInvoicePayload {
   const credit = sale.paymentMethod === 'credit';
   return {
     date: alegraDate(sale.date),
     dueDate: alegraDate(credit ? addDays(sale.date, creditDays) : sale.date),
     client: { id: clientId },
-    items: invoiceLines(sale, itemIds, vatTaxId),
+    items: invoiceLines(sale, itemIds),
     paymentForm: credit ? 'CREDIT' : 'CASH',
     ...(sale.paymentMethod !== 'credit' && { paymentMethod: PAYMENT_METHODS[sale.paymentMethod] }),
     status: 'draft',
@@ -191,14 +169,13 @@ export function voidCreditNotePayload(
   invoiceId: string,
   clientId: string,
   itemIds: ReadonlyMap<string, string>,
-  vatTaxId: string,
   reason: string,
   today: Date,
 ): AlegraCreditNotePayload {
   return {
     date: alegraDate(today),
     client: { id: clientId },
-    items: invoiceLines(sale, itemIds, vatTaxId),
+    items: invoiceLines(sale, itemIds),
     invoices: [{ id: invoiceId, amount: sale.total }],
     cause: reason.trim() || `Anulación de la orden ${sale.id}`,
     type: 'VOID_ELECTRONIC_INVOICE',
