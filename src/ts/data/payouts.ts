@@ -92,6 +92,40 @@ export async function createPayout(payout: NewPayout): Promise<void> {
   });
 }
 
+// ---------- Deshacer un pago (solo admin) ----------
+
+/** El pago ya no existe (otro equipo lo deshizo) o cambió. */
+export class PayoutNotFoundError extends Error {
+  constructor() {
+    super('Ese pago ya no existe: puede que se haya deshecho desde otro equipo.');
+  }
+}
+
+/**
+ * Deshace un pago de comisiones: lo guarda tal cual en `payoutReversals` (con quién, cuándo y por
+ * qué) y lo borra de `commissionPayouts`, en una sola transacción. La semana vuelve a quedar
+ * pendiente y los préstamos que descontaba vuelven a quedar por descontar. Las reglas solo dejan
+ * borrar un pago si en la misma operación queda su copia en el historial.
+ */
+export async function undoPayout(id: string, reason: string, by: { email: string; name: string }): Promise<void> {
+  const db = getDb();
+  const ref = doc(payoutsCollection(), id);
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    const data = snapshot.data();
+    const paidAt = data?.paidAt;
+    if (!snapshot.exists() || !data || !(paidAt instanceof Timestamp)) throw new PayoutNotFoundError();
+    transaction.set(doc(db, 'payoutReversals', `${id}_${paidAt.toMillis()}`), {
+      payoutId: id,
+      payout: data,
+      reversedAt: serverTimestamp(),
+      reversedBy: by,
+      reason: reason.trim(),
+    });
+    transaction.delete(ref);
+  });
+}
+
 // ---------- Acumular a la próxima semana ----------
 
 function deferralsCollection() {

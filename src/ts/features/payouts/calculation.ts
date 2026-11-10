@@ -100,6 +100,11 @@ export interface Settlement {
   status: SettlementStatus;
   /** Solo si se puede registrar el pago de esta semana. */
   coverage: PayoutCoverage | null;
+  /**
+   * El pago de esta semana, si se puede deshacer: solo el último pago del empleado (cada pago cubre
+   * desde donde terminó el anterior; deshacer uno del medio rompería la cadena).
+   */
+  undoable: Payout | null;
 }
 
 function sumBy(entries: readonly PayoutEntry[], value: (entry: PayoutEntry) => number): number {
@@ -211,6 +216,7 @@ export function buildSettlement({ sellerEmail, sales, payouts, deferrals, loans,
     carryover,
     carryoverTotal: sumBy(carryover, (entry) => entry.commission),
     toPay,
+    undoable: ownPayout && payouts.at(-1)?.id === ownPayout.id ? ownPayout : null,
     loans: loanSummary,
     netToPay: toPay - (payable ? deduction : 0),
     status,

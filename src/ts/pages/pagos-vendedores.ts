@@ -9,6 +9,7 @@ import { fetchActiveUsers } from '../data/users';
 import { buildSettlement, settlementRange, type Settlement } from '../features/payouts/calculation';
 import { downloadCsv, settlementCsv } from '../features/payouts/export';
 import { setupDeferDialog } from '../features/payouts/defer-dialog';
+import { setupUndoDialog } from '../features/payouts/undo-dialog';
 import { setupPayDialog } from '../features/payouts/pay-dialog';
 import {
   renderEmployee,
@@ -44,9 +45,10 @@ function removeAdminOnly(): void {
   roots.forEach((root) => root.querySelectorAll('[data-admin-only]').forEach((element) => element.remove()));
 }
 
-function initialWeekOffset(): number {
+/** Semana pedida en la URL (?semana=-1); null si no viene. */
+function requestedWeekOffset(): number | null {
   const value = Number(new URLSearchParams(window.location.search).get(PARAMS.week));
-  return Number.isInteger(value) && value < 0 ? value : 0;
+  return Number.isInteger(value) && value < 0 ? value : null;
 }
 
 function syncUrl(employee: Employee, offset: number, isSelf: boolean): void {
@@ -91,7 +93,7 @@ async function main(session: SessionUser): Promise<void> {
 
   const state: { employee: Employee; offset: number } = {
     employee: employees.find((employee) => employee.email === requested) ?? employees.find((employee) => employee.email === email) ?? employees[0],
-    offset: initialWeekOffset(),
+    offset: requestedWeekOffset() ?? 0,
   };
   if (!state.employee) {
     showLoadError('No hay empleados activos para mostrar.');
@@ -123,6 +125,19 @@ async function main(session: SessionUser): Promise<void> {
   let latestRequest = 0;
   let loadedOnce = false;
 
+  /** Liquidación de un empleado en una semana (y su cédula y teléfono). */
+  async function fetchSettlement(employee: Employee, week: PayoutWeek): Promise<{ settlement: Settlement; info: EmployeeInfo | null }> {
+    const [payouts, deferrals, loans, info] = await Promise.all([
+      fetchPayouts(employee.email),
+      fetchDeferrals(employee.email),
+      fetchLoansByEmployee(employee.email),
+      loadInfo(employee.email),
+    ]);
+    const sales = await fetchSalesBySeller(employee.email, settlementRange(week, payouts, PAYOUT_TRACKING_START));
+    const settlement = buildSettlement({ sellerEmail: employee.email, sales, payouts, deferrals, loans, week, trackingStart: PAYOUT_TRACKING_START });
+    return { settlement, info };
+  }
+
   async function load(): Promise<void> {
     const requestId = ++latestRequest;
     const { employee, offset } = state;
@@ -133,16 +148,9 @@ async function main(session: SessionUser): Promise<void> {
     renderEmployee(employee, undefined);
     renderLoading(true);
     try {
-      const [payouts, deferrals, loans, info] = await Promise.all([
-        fetchPayouts(employee.email),
-        fetchDeferrals(employee.email),
-        fetchLoansByEmployee(employee.email),
-        loadInfo(employee.email),
-      ]);
-      const sales = await fetchSalesBySeller(employee.email, settlementRange(week, payouts, PAYOUT_TRACKING_START));
+      const { settlement, info } = await fetchSettlement(employee, week);
       if (requestId !== latestRequest) return;
 
-      const settlement = buildSettlement({ sellerEmail: employee.email, sales, payouts, deferrals, loans, week, trackingStart: PAYOUT_TRACKING_START });
       current = { employee, week, settlement };
       renderEmployee(employee, info);
       renderSettlement(settlement, employee.name, commissionRate);
@@ -198,6 +206,20 @@ async function main(session: SessionUser): Promise<void> {
         openDeferDialog({ employee: current.employee, week: current.week, amount: current.settlement.toPay });
       }
     });
+    const openUndoDialog = setupUndoDialog({ email, name }, () => void load());
+    byId('btn-undo-paid').addEventListener('click', () => {
+      const payout = current?.settlement.undoable;
+      if (current && payout) openUndoDialog({ employee: current.employee, week: current.week, payout });
+    });
+
+    // Al administrador se le abre la semana que toca pagar: si la semana pasada (ya cerrada) quedó
+    // pendiente (y no se decidió acumularla), esa, en vez de la semana en curso: así no se paga por
+    // error la que apenas empieza.
+    if (requestedWeekOffset() === null) {
+      const previous = await fetchSettlement(state.employee, payoutWeek(-1)).catch(() => null);
+      const kind = previous?.settlement.status.kind;
+      if (kind === 'pending') state.offset = -1;
+    }
   }
 
   await load();

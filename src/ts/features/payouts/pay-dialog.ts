@@ -1,6 +1,6 @@
 import { createPayout, PayoutAlreadyExistsError } from '../../data/payouts';
 import { firestoreErrorMessage } from '../../lib/errors';
-import { formatCOP } from '../../lib/format';
+import { formatCOP, formatWeekdayDateTime } from '../../lib/format';
 import { byId } from '../../ui/dom';
 import { showToast } from '../../ui/toast';
 import type { PayoutCoverage, Settlement } from './calculation';
@@ -81,9 +81,13 @@ export function setupPayDialog(paidBy: { email: string; name: string }, onPaid: 
     byId('pay-loans-row').hidden = coverage.loanDeduction === 0;
     byId('pay-loans').textContent = `− ${formatCOP(coverage.loanDeduction)}`;
     byId('pay-total').textContent = formatCOP(coverage.amount - coverage.loanDeduction);
+    byId('pay-current-warning').hidden = !week.isCurrent;
+    byId('pay-current-warning-text').textContent =
+      `Esta semana todavía no termina (cierra el ${formatWeekdayDateTime(week.range.end)}). ` +
+      '¿Seguro que quieres pagarla ahora? Si querías pagar la semana pasada, cancela y usa la flecha ‹ para ir a ella.';
     byId('pay-help').textContent = week.isCurrent
-      ? 'La semana aún no ha cerrado: lo que el empleado venda después de este pago se sumará a la próxima semana.'
-      : 'Se registra con la fecha y hora de hoy y no se puede deshacer desde el sistema.';
+      ? 'Lo que el empleado venda después de este pago se sumará a la próxima semana.'
+      : 'Se registra con la fecha y hora de hoy. Si te equivocas, puedes deshacerlo desde esta misma semana.';
     dialog.showModal();
   };
 }
