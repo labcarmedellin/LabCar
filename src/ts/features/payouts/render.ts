@@ -124,7 +124,8 @@ function renderStatus(settlement: Settlement): void {
     payButton.disabled = !canPay;
     deferButton.disabled = status.kind !== 'pending';
     byId('btn-mark-paid-label').textContent = canPay ? `Marcar pagado (${formatCOP(netToPay)})` : 'Marcar pagado';
-    const hint = actionsHint(status);
+    byId('btn-undo-paid').hidden = settlement.undoable === null;
+    const hint = actionsHint(settlement);
     const hintEl = byId('btn-mark-paid-hint');
     hintEl.hidden = hint === null;
     hintEl.textContent = hint ?? '';
@@ -132,7 +133,8 @@ function renderStatus(settlement: Settlement): void {
 }
 
 /** Explica por qué los botones están deshabilitados, o qué se decidió (null = nada que aclarar). */
-function actionsHint(status: Settlement['status']): string | null {
+function actionsHint(settlement: Settlement): string | null {
+  const { status } = settlement;
   switch (status.kind) {
     case 'pending':
       return null;
@@ -141,7 +143,10 @@ function actionsHint(status: Settlement['status']): string | null {
       return `Acumulado el ${formatShortDateTime(status.deferral.deferredAt)} por ${by}. Aún puedes marcarlo pagado.`;
     }
     case 'paid':
-      return 'Esta semana ya está pagada.';
+      if (settlement.undoable) return 'Esta semana ya está pagada. Si fue un error, puedes deshacer el pago.';
+      return status.inLaterWeek
+        ? `Se pagó junto con una semana posterior (pago del ${formatShortDate(status.payout.paidAt)}). Si fue un error, ve a esa semana y deshazlo.`
+        : 'Esta semana ya está pagada. Para deshacer este pago, primero deshaz los pagos más recientes del empleado.';
     case 'empty':
       return 'No hay comisiones por pagar en esta semana.';
     case 'untracked':

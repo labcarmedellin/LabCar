@@ -210,6 +210,22 @@ service cloud.firestore {
         && d.paidBy.name is string && d.paidBy.name.size() <= 100;
     }
 
+    // Pago deshecho: copia exacta del pago que se borra en la misma operación.
+    function isValidPayoutReversal(reversalId) {
+      let d = request.resource.data;
+      let original = get(/databases/$(database)/documents/commissionPayouts/$(d.payoutId)).data;
+      return d.keys().hasOnly(['payoutId', 'payout', 'reversedAt', 'reversedBy', 'reason'])
+        && d.payoutId is string
+        && reversalId == d.payoutId + '_' + string(original.paidAt.toMillis())
+        && d.payout == original
+        && !existsAfter(/databases/$(database)/documents/commissionPayouts/$(d.payoutId))
+        && d.reversedAt == request.time
+        && d.reversedBy.keys().hasOnly(['email', 'name'])
+        && d.reversedBy.email == sessionEmail()
+        && d.reversedBy.name is string && d.reversedBy.name.size() <= 100
+        && d.reason is string && d.reason.size() >= 5 && d.reason.size() <= 200;
+    }
+
     // Decisión de no pagar una semana y acumular el saldo a la siguiente (solo admin). Mismo ID que el pago.
     // Es solo un registro: el saldo se arrastra igual.
     function isValidDeferral(deferralId) {
@@ -437,6 +453,17 @@ service cloud.firestore {
       allow read: if hasRole(['admin', 'manager'])
         || (hasRole(['basic']) && resource.data.sellerEmail == sessionEmail());
       allow create: if hasRole(['admin']) && isValidPayout(payoutId);
+      allow update: if false;
+      // Deshacer un pago (solo admin): solo si en la misma operación queda su copia en payoutReversals.
+      allow delete: if hasRole(['admin'])
+        && existsAfter(/databases/$(database)/documents/payoutReversals/$(payoutId + '_' + string(resource.data.paidAt.toMillis())));
+    }
+
+    // Historial de pagos deshechos (solo admin). Copia exacta del pago, con quién, cuándo y por qué.
+    // ID = "{pago}_{paidAt en milisegundos}": un pago puede deshacerse, volverse a pagar y deshacerse otra vez.
+    match /payoutReversals/{reversalId} {
+      allow read: if hasRole(['admin']);
+      allow create: if hasRole(['admin']) && isValidPayoutReversal(reversalId);
       allow update, delete: if false;
     }
 
