@@ -19,15 +19,14 @@ export interface SellerPayout {
 }
 
 export interface DashboardMetrics {
-  /**
-   * collected: plata que entró en el periodo = ventas de contado del periodo + créditos cobrados en el
-   * periodo (aunque la venta sea de antes). fromReceivables es la parte que vino de cartera.
-   */
-  sales: { total: number; collected: number; fromReceivables: number; count: number; cars: number; motorcycles: number };
+  sales: { total: number; count: number; cars: number; motorcycles: number };
   expenses: { total: number; count: number };
   receivables: { total: number; count: number; overdue: number };
   commissions: { total: number; payouts: SellerPayout[] };
-  /** Plata real: lo cobrado − gastos − comisiones. No incluye cartera (ventas por cobrar). */
+  /**
+   * Ventas del periodo − gastos − comisiones. Cuenta todas las ventas del periodo (también las de
+   * crédito aún sin cobrar) y no suma la cartera de periodos anteriores que se cobre en este.
+   */
   netProfit: number;
 }
 
@@ -52,15 +51,13 @@ function sellerPayouts(sales: readonly Sale[]): SellerPayout[] {
 }
 
 /**
- * Calcula los indicadores del periodo a partir de las ventas (más recientes primero) y gastos ya filtrados
- * por fecha, y de los créditos cobrados en el periodo (filtrados por fecha de pago).
- * Las ventas y gastos anulados no cuentan en nada. Una venta a crédito suma en "Ventas" y comisiones el día que se
- * hizo, y en "Cobrado" el día que se pagó: así nunca se cuenta dos veces.
+ * Calcula los indicadores del periodo a partir de las ventas (más recientes primero) y gastos ya
+ * filtrados por fecha. Las ventas y gastos anulados no cuentan en nada. Una venta a crédito suma en
+ * "Ventas", comisiones y ganancia el día que se hizo (no el día que se cobra).
  */
 export function computeMetrics(
   allSales: readonly Sale[],
   allExpenses: readonly Expense[],
-  settledCredits: readonly Sale[],
   overdueDays: number,
   now = new Date(),
 ): DashboardMetrics {
@@ -71,22 +68,11 @@ export function computeMetrics(
   const expensesTotal = sum(expenses, (expense) => expense.amount);
   const payouts = sellerPayouts(sales);
   const commissionsTotal = sum(payouts, (payout) => payout.commission);
-  const fromReceivables = sum(
-    settledCredits.filter((sale) => sale.status === 'paid'),
-    (sale) => sale.total,
-  );
-  const collected = sum(
-    sales.filter((sale) => sale.paymentMethod !== 'credit'),
-    (sale) => sale.total,
-  ) + fromReceivables;
-  // Las comisiones se restan completas: se le pagan al empleado aunque el cliente aún no haya pagado.
-  const netProfit = collected - expensesTotal - commissionsTotal;
+  const netProfit = salesTotal - expensesTotal - commissionsTotal;
 
   return {
     sales: {
       total: salesTotal,
-      collected,
-      fromReceivables,
       count: sales.length,
       cars: sales.filter((sale) => sale.vehicleType === 'car').length,
       motorcycles: sales.filter((sale) => sale.vehicleType === 'motorcycle').length,

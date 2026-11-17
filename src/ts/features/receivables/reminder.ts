@@ -4,7 +4,7 @@ import { formatCOP, formatShortDate } from '../../lib/format';
 import type { Sale } from '../../models/sale';
 import { formatPlate } from '../sales/plate';
 
-/** "3114179913" → "311 417 9913" */
+/** "3503615324" → "350 361 5324" */
 export function formatPhone(phone: string): string {
   return /^\d{10}$/.test(phone) ? `${phone.slice(0, 3)} ${phone.slice(3, 6)} ${phone.slice(6)}` : phone;
 }

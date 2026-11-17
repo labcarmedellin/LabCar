@@ -93,8 +93,7 @@ export function renderAdminDetails(metrics: DashboardMetrics, sales: readonly Sa
   const netValue = byId('kpi-net-value');
   netValue.textContent = formatCOP(netProfit);
   netValue.dataset.negative = String(netProfit < 0);
-  const fromReceivables = salesMetrics.fromReceivables > 0 ? ` (incl. ${formatCOP(salesMetrics.fromReceivables)} de cartera)` : '';
-  setText('kpi-net-detail', `Cobrado ${formatCOP(salesMetrics.collected)}${fromReceivables} − gastos − comisiones`);
+  setText('kpi-net-detail', `Ventas ${formatCOP(salesMetrics.total)} − gastos − comisiones`);
 
   setText('kpi-receivables-value', formatCOP(receivables.total));
   setText('kpi-receivables-detail', pluralize(receivables.count, 'venta pendiente', 'ventas pendientes'));
