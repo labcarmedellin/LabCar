@@ -1,7 +1,7 @@
 import '../../css/main.css';
 import { DEFAULT_OVERDUE_DAYS } from '../config/business';
 import { fetchExpenses } from '../data/expenses';
-import { fetchSales, fetchSettledCredits } from '../data/sales';
+import { fetchSales } from '../data/sales';
 import { fetchOverdueDays } from '../data/settings';
 import { computeMetrics } from '../features/dashboard/metrics';
 import {
@@ -64,16 +64,15 @@ async function main(): Promise<void> {
     renderPeriodLabels(period, offset, range);
     renderLoading(true);
     try {
-      // Cobros de cartera y días de mora solo se usan en las tarjetas del administrador.
-      const [sales, expenses, settledCredits, days] = await Promise.all([
+      // Los días de mora solo se usan en las tarjetas del administrador.
+      const [sales, expenses, days] = await Promise.all([
         fetchSales(range),
         fetchExpenses(range),
-        isFull ? fetchSettledCredits(range) : [],
         isFull ? loadOverdueDays() : DEFAULT_OVERDUE_DAYS,
       ]);
       if (requestId !== latestRequest) return;
 
-      const metrics = computeMetrics(sales, expenses, settledCredits, days, now);
+      const metrics = computeMetrics(sales, expenses, days, now);
       renderSummary(metrics);
       if (isFull) renderAdminDetails(metrics, sales);
     } catch (error) {

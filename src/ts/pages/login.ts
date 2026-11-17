@@ -15,6 +15,8 @@ import { byId } from '../ui/dom';
 import { setupPasswordToggle } from '../ui/password-toggle';
 import { showToast } from '../ui/toast';
 
+byId('app-version').textContent = `v${__APP_VERSION__}`;
+
 const form = byId<HTMLFormElement>('login-form');
 const userInput = byId<HTMLInputElement>('login-user');
 const passwordInput = byId<HTMLInputElement>('login-password');

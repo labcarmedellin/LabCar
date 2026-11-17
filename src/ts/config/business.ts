@@ -70,19 +70,18 @@ export const EXPENSE_LIMITS = {
  * WhatsApp de LAB CAR para cobrar. El enlace de WhatsApp no puede elegir el número que envía:
  * sale desde la cuenta abierta en el equipo, por eso se le recuerda a quien cobra cuál debe ser.
  */
-export const BUSINESS_WHATSAPP = '3114179913';
+export const BUSINESS_WHATSAPP = '3503615324';
 
 /**
  * Cuenta para que los clientes paguen por transferencia (aparece en el recordatorio de cobro).
- * PENDIENTE: es una cuenta de ejemplo. Al poner la cuenta real de LAB CAR cambia `isPlaceholder`
- * a false y desaparece el aviso de "cuenta de ejemplo" en el mensaje de cobro.
+ * `isPlaceholder: true` muestra un aviso de "cuenta de ejemplo" en el mensaje de cobro.
  */
 export const PAYMENT_ACCOUNT = {
   bank: 'Bancolombia',
   type: 'Cuenta de ahorros',
-  number: '000-000000-00',
-  holder: 'LAB CAR',
-  isPlaceholder: true,
+  number: '61792687201',
+  holder: 'Juan Miguel Lopez',
+  isPlaceholder: false,
 } as const;
 
 /**
